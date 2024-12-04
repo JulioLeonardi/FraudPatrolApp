@@ -1,5 +1,5 @@
 //
-// Created by jalg0 on 11/24/2024.
+// Created by jalg0, sg3, Alejandra Alzamora on 11/24/2024.
 //
 
 #ifndef TRANSACTIONGRAPH_H
@@ -15,21 +15,21 @@
 using namespace std;
 
 //Julio Leonardi's part
-class TransactionGraph { // graph will hopefully not feature self loops
+class TransactionGraph {
     unordered_map<int, vector<int>> adjacencyList;
     int nodeNum;
     int cycleNum; // code will have at least cycleNum cycles, cycle generation may add more
-    int edgeNum; // code will have at least this amount of edges, cycle generation may add more
+    int edgeNum;
     int minCycleSize;
     int maxCycleSize;
 
 public:
-    TransactionGraph(int nm, int en, int cn, int mincs, int maccs) {
-        cycleNum = cn;
+    TransactionGraph(int nm, int en) {//Artificial cycle addition is suppressed with this modified constructor
+        cycleNum = 0;
         nodeNum = nm;
         edgeNum = en;
-        minCycleSize = mincs;
-        maxCycleSize = maccs;
+        minCycleSize = 0;
+        maxCycleSize = 0;
         makeGraph();
     }
 
@@ -125,7 +125,7 @@ public:
 };
 
 //Sebastian Garcia's part
-class TrajanCycle {
+class TarjanCycle{
     unordered_map<int, vector<int>> adjacencyList;
     int index; // Tarjan's index counter
     unordered_map<int, int> indexes; // node to index value for map
@@ -134,10 +134,13 @@ class TrajanCycle {
     stack<int> Nstack; // Stack for algo
     vector<vector<int>> cycles; // List of cycles
 
-    public:
+    int cycleSourceNode;//source node for cycle
 
-    TrajanCycle(const unordered_map<int, vector<int>>& al) {
+public:
+
+    TarjanCycle(unordered_map<int, vector<int>> al) {
         adjacencyList = al;
+        cycleSourceNode = -1;
     }
 
     // Tarjan's Algorithm to detect cycles
@@ -151,6 +154,7 @@ class TrajanCycle {
             Nstack.pop();
         }
         cycles.clear();
+        cycleSourceNode = -1; //Reset cycle
 
         // DFS for all unvisited nodes
         for (auto& nodepair : adjacencyList) {
@@ -160,11 +164,18 @@ class TrajanCycle {
             }
         }
 
-        // Filter SCCs to get cycles
+
+        // Filter SCCs to get cycles, including self-loops
         vector<vector<int>> cycleList;
         for (auto& SCC : cycles) {
             if (SCC.size() > 1) {
                 cycleList.push_back(SCC);
+            } else {
+                int node = SCC[0];
+                // Check for self-loop
+                if (find(adjacencyList[node].begin(), adjacencyList[node].end(), node) != adjacencyList[node].end()) {
+                    cycleList.push_back(SCC);
+                }
             }
         }
         cycles = cycleList;
@@ -180,12 +191,12 @@ class TrajanCycle {
 
         // Finding all successors of the node
         for (int neighbor : adjacencyList[node]) {
-            // If neighbor is not yet indexed, then we need to recurse on it
             if (indexes.find(neighbor) == indexes.end()) {
+                // Successor neighbor has not yet been visited; recurse on it
                 strongConnect(neighbor);
                 lowlink[node] = min(lowlink[node], lowlink[neighbor]);
             } else if (onStack[neighbor]) {
-                // Update the lowlink value if neighbor is in the stack
+                // Successor neighbor is in stack and hence in the current SCC
                 lowlink[node] = min(lowlink[node], indexes[neighbor]);
             }
         }
@@ -201,7 +212,29 @@ class TrajanCycle {
                 component.push_back(curNode);
             } while (curNode != node);
             cycles.push_back(component);
+
+            //Checks if compeonent forms the cycle.
+            bool isCycle = false;
+            if (component.size() > 1) {
+                isCycle = true;
+            } else {
+                // Check for self-loop
+                int singleNode = component[0];
+                if (find(adjacencyList[singleNode].begin(), adjacencyList[singleNode].end(), singleNode) != adjacencyList[singleNode].end()) {
+                    isCycle = true;
+                }
+            }
+
+            // If a cycle is detected and no source node has been set yet, set it
+            if (isCycle && cycleSourceNode == -1) {
+                cycleSourceNode = node;
+            }
         }
+    }
+
+    int detectCycleSourceNode() {
+        detectCycles();
+        return cycleSourceNode;
     }
 
     vector<vector<int>> getCyclePaths() {
@@ -220,6 +253,7 @@ class UnionFindCycle {
     unordered_map<int, int> level;    // Level map for union by rank
     unordered_map<int, bool> visitedNodes; // Marks visited nodes
     set<pair<int, int>> cycleConnections;  // Set of edges that form cycles
+    int unionFindCycleNumber = 0;
 
     public:
 
@@ -271,32 +305,73 @@ class UnionFindCycle {
     // Function to detect cycles using Union-Find
     bool detectCycles() {
         bool cycleFound = false;
+        set<pair<int, int>> visitedEdges; // Helps ensure each edge is processed only once
 
         for (auto& nodes : adjacencyList) {
             int node = nodes.first;
 
             for (int neighbor : nodes.second) {
-                // self-loop edge case
+                // Ensure each edge is processed only once
+                if (visitedEdges.count({min(node, neighbor), max(node, neighbor)}) > 0) {
+                    continue; // Skip already processed edges
+                }
+                visitedEdges.insert({min(node, neighbor), max(node, neighbor)});
+
+                // Self-loop case
                 if (node == neighbor) {
                     cycleConnections.insert({node, neighbor});
                     cycleFound = true;
-                    continue;  // continues along the next neighbor
+                    unionFindCycleNumber++;
+                    continue;
                 }
 
-                // If findSet is true, cycle is detected
+                // If the nodes are already in the same set, a cycle is detected
                 if (findSet(node) == findSet(neighbor)) {
-                    // Add the cycle-causing edge to cycleConnections set
+                    // Add the cycle-causing edge to the cycleConnections set
                     cycleConnections.insert({node, neighbor});
                     cycleFound = true;
+                    unionFindCycleNumber++;
+                } else {
+                    // Union the sets of the two nodes if not already in the same set
+                    unionSets(node, neighbor);
+                }
+            }
+        }
+        return cycleFound;
+    }
+
+    int detectCycleSourceNode() {
+        set<pair<int, int>> visitedEdges; // To ensure each edge is processed only once
+
+        for (auto& nodes : adjacencyList) {
+            int node = nodes.first;
+
+            for (int neighbor : nodes.second) {
+                // Ensure each edge is processed only once
+                if (visitedEdges.count({min(node, neighbor), max(node, neighbor)}) > 0) {
+                    continue; // Skip already processed edges
+                }
+                visitedEdges.insert({min(node, neighbor), max(node, neighbor)});
+
+                // Self-loop case
+                if (node == neighbor) {
+                    return node; // Return the node containing a self-loop
                 }
 
-                // union the sets of the two nodes if not already together
+                // If the nodes are already in the same set, a cycle is detected
+                if (findSet(node) == findSet(neighbor)) {
+                    return node; // Return the source node responsible for the cycle
+                }
+
+                // Union the sets of the two nodes if not already in the same set
                 unionSets(node, neighbor);
             }
         }
 
-        return cycleFound;
+        return -1; // If no cycles are found
     }
+
+
 
     set<pair<int, int>> getCycleEdges() {
         return cycleConnections;
@@ -304,7 +379,8 @@ class UnionFindCycle {
 
     //added functions for results (Julio)
     int getCycleNumber() const {
-        return cycleConnections.size();
+        //return cycleConnections.size();
+        return unionFindCycleNumber;
     }
 
     void resetVisitedNodes() {
