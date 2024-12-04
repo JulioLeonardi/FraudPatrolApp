@@ -1,12 +1,12 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/System.hpp>
 #include <SFML/Window.hpp>
-#include <sstream>
-#include <iostream>
 #include <unordered_map>
-#include <vector>
 #include <chrono>
 #include "TransactionGraph.h"
+
+//Used the SFML program template found in
+//https://github.com/SFML/cmake-sfml-project
 
 using namespace std;
 using namespace sf;
@@ -215,8 +215,12 @@ int main() {
                     // Display results
                     resultsArea.addText("Tarjan Cycle Detection Time: " + to_string(tarjanTime) + " ms");
                     resultsArea.addText("Union-Find Cycle Detection Time: " + to_string(unionFindTime) + " ms");
-                    resultsArea.addText("Graph has cycle: " + string(hasCycle ? "Yes" : "No"));
-                    resultsArea.addText("Cycle source node " + to_string(srcNode));
+                    if (hasCycle && srcNode != -1) {
+                        resultsArea.addText("Graph has cycle: Yes");
+                        resultsArea.addText("Cycle source node " + to_string(srcNode));
+                    } else {
+                        resultsArea.addText("Graph has cycle: No");
+                    }
                     resultsArea.addText("");
                 }
             }
